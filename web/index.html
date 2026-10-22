@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jheel Prahari · Lake Watch</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#0B1622;--deep:#07111C;--card:#112335;--line:#27415A;--ink:#D5E2EA;--muted:#8DA2B4;--teal:#2CC9DB;--orange:#FF7A3D;--green:#3DDC97}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI",system-ui,sans-serif;font-size:14px}
+header{display:flex;align-items:center;gap:16px;padding:10px 18px;background:var(--deep);border-bottom:1px solid var(--line)}
+header img{height:34px}
+header h1{font:600 20px "Bahnschrift","Segoe UI",sans-serif;margin:0;letter-spacing:.5px}
+header .sub{color:var(--muted)}
+.pill{margin-left:auto;padding:5px 12px;border-radius:999px;border:1px solid var(--teal);color:var(--teal);font-weight:600}
+.pill.alarm{border-color:var(--orange);color:var(--deep);background:var(--orange)}
+main{display:grid;grid-template-columns:1fr 440px;height:calc(100vh - 56px)}
+#map{height:100%;background:#000}
+aside{overflow:auto;padding:14px;display:flex;flex-direction:column;gap:12px;border-left:1px solid var(--line)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.card h2{font:600 13px "Bahnschrift","Segoe UI",sans-serif;letter-spacing:1px;text-transform:uppercase;color:var(--teal);margin:0 0 8px}
+.card h2.o{color:var(--orange)}
+.stats{display:flex;gap:18px}
+.stat b{display:block;font:600 26px "Bahnschrift","Segoe UI",sans-serif;color:#F1F6F9}
+.stat span{color:var(--muted);font-size:12px}
+.muted{color:var(--muted);font-size:12px}
+button{background:#17324A;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-weight:600;cursor:pointer}
+button:hover{border-color:var(--teal)}
+button.fire{background:var(--orange);border-color:var(--orange);color:var(--deep)}
+button:disabled{opacity:.5;cursor:wait}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input[type=range]{width:100%}
+.verdict{font-weight:700}.verdict.bad{color:var(--orange)}.verdict.ok{color:var(--green)}
+.alert{border-left:3px solid var(--orange);padding:6px 0 6px 10px;margin:6px 0}
+.alert .t{font-weight:600}
+.cd{font:600 16px "Bahnschrift","Segoe UI",sans-serif;color:var(--orange)}
+.sms{font-size:12px;color:var(--muted);margin-top:2px}
+.ask{display:flex;gap:6px}.ask input{flex:1;background:var(--deep);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:7px}
+.ans{margin-top:8px;line-height:1.4}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:4px 2px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--muted);font-weight:600}
+.leaflet-container{font-family:"Segoe UI",sans-serif}
+@media (max-width:900px){main{grid-template-columns:1fr;height:auto}#map{height:55vh}aside{border-left:0}}
+</style>
+</head>
+<body>
+<header>
+  <img src="logo.png" alt="Anivortex">
+  <div><h1>Jheel Prahari · Lake Watch</h1><div class="sub" id="sub">loading…</div></div>
+  <span class="pill" id="status">WATCHING</span>
+</header>
+<main>
+  <div id="map"></div>
+  <aside>
+    <div class="card">
+      <h2>Lake AI · area from Sentinel-2</h2>
+      <div class="stats">
+        <div class="stat"><b id="area">–</b><span id="areaDate">area</span></div>
+        <div class="stat"><b id="growth">–</b><span id="growthSpan">growth</span></div>
+      </div>
+      <canvas id="chart" height="120"></canvas>
+      <input type="range" id="slider" min="0" max="0" value="0">
+      <div class="muted" id="sceneInfo"></div>
+    </div>
+
+    <div class="card">
+      <h2>Radar drain check · Sentinel-1</h2>
+      <div id="drain2023"></div>
+      <div class="row" style="margin-top:8px"><button id="scanBtn">Run live scan on the latest passes</button></div>
+      <div id="scanOut" class="muted" style="margin-top:6px"></div>
+    </div>
+
+    <div class="card">
+      <h2 class="o">Trigger</h2>
+      <div class="row">
+        <button class="fire" data-src="gauge">River gauge spike</button>
+        <button class="fire" data-src="station">Lake station alarm</button>
+        <button class="fire" data-src="manual">Control-room button</button>
+      </div>
+      <div class="muted" style="margin-top:6px">Alerts go to every place on this lake's flood path. SMS delivery is simulated unless a gateway is configured.</div>
+    </div>
+
+    <div class="card">
+      <h2 class="o">Alerts</h2>
+      <div id="alerts" class="muted">No alerts.</div>
+    </div>
+
+    <div class="card">
+      <h2>Flood path · arrival after an outburst</h2>
+      <table id="eta"><tr><th>Place</th><th>River km</th><th>Arrival</th></tr></table>
+      <div class="muted" id="calib"></div>
+    </div>
+
+    <div class="card">
+      <h2>Ask the lake</h2>
+      <div class="ask"><input id="q" placeholder="Has the lake grown? When does water reach Chungthang?"><button id="askBtn">Ask</button></div>
+      <div class="ans" id="ans"></div>
+    </div>
+  </aside>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let LAKE, map, outlineLayer, sceneLayer, chart, countdowns = [];
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+  return r.json();
+}
+
+function initMap() {
+  map = L.map("map", {zoomControl: true});
+  // the view must exist before any vector layer is added, or Leaflet cannot clip it
+  map.fitBounds(L.geoJSON(LAKE.flowpath).getBounds().pad(0.05));
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    {maxZoom: 17, attribution: "Imagery © Esri | Sentinel-2/1 © ESA Copernicus | DEM © Copernicus"}).addTo(map);
+  L.geoJSON(LAKE.flowpath, {style: {color: "#FF7A3D", weight: 3, opacity: .9, dashArray: "6 4"}}).addTo(map);
+  LAKE.eta.forEach(p => {
+    L.circleMarker([p.lat, p.lon], {radius: 7, color: "#FF7A3D", fillColor: "#07111C", fillOpacity: 1, weight: 2})
+      .bindTooltip(`<b>${p.name}</b><br>${p.river_km} km down the river<br>water in ${p.eta_min}-${p.eta_max} min`)
+      .addTo(map);
+  });
+  const [lon, lat] = LAKE.lake.seed;
+  L.circleMarker([lat, lon], {radius: 6, color: "#2CC9DB", weight: 2}).bindTooltip("South Lhonak lake").addTo(map);
+}
+
+function showScene(i) {
+  const s = LAKE.series[i];
+  if (sceneLayer) map.removeLayer(sceneLayer);
+  if (outlineLayer) map.removeLayer(outlineLayer);
+  sceneLayer = L.imageOverlay(s.image, s.image_bounds, {opacity: .95}).addTo(map);
+  outlineLayer = L.geoJSON(s.outline, {style: {color: s.after_burst ? "#FF7A3D" : "#2CC9DB", weight: 2, fillOpacity: .15}}).addTo(map);
+  $("area").textContent = s.area_km2.toFixed(2) + " km²";
+  $("areaDate").textContent = s.date + (s.after_burst ? " · after the burst" : "");
+  $("sceneInfo").textContent = `${s.scene} · ${(s.clear_over_lake * 100).toFixed(0)}% of the lake cloud-free`;
+  chart.data.datasets[0].pointRadius = LAKE.series.map((_, k) => k === i ? 6 : 3);
+  chart.update("none");
+}
+
+function initPanels() {
+  const g = LAKE.growth, d = LAKE.drain_check;
+  $("sub").textContent = `${LAKE.lake.name}, North Sikkim · ${LAKE.series.length} Sentinel-2 scenes · flood path ${LAKE.flowpath.length_km} km`;
+  $("growth").textContent = `+${g.pct}%`;
+  $("growthSpan").textContent = `${g.from.slice(0, 4)} → ${g.to.slice(0, 7)} · ${g.trend_km2_per_year.toFixed(3)} km²/yr`;
+  chart = new Chart($("chart"), {
+    type: "line",
+    data: {labels: LAKE.series.map(s => s.date), datasets: [{data: LAKE.series.map(s => s.area_km2),
+      borderColor: "#2CC9DB", backgroundColor: "rgba(44,201,219,.15)", fill: true, tension: .25,
+      pointBackgroundColor: LAKE.series.map(s => s.after_burst ? "#FF7A3D" : "#2CC9DB")}]},
+    options: {plugins: {legend: {display: false}}, scales: {
+      x: {ticks: {color: "#8DA2B4", maxRotation: 0, callback(v) { return this.getLabelForValue(v).slice(0, 4); }}, grid: {color: "#1F3A52"}},
+      y: {ticks: {color: "#8DA2B4"}, grid: {color: "#1F3A52"}, title: {display: true, text: "km²", color: "#8DA2B4"}}}}
+  });
+  const sl = $("slider"); sl.max = LAKE.series.length - 1; sl.value = LAKE.series.findIndex(s => s.after_burst) - 1;
+  sl.oninput = () => showScene(+sl.value);
+  showScene(+sl.value);
+  $("drain2023").innerHTML = `<span class="verdict ${d.drained ? "bad" : "ok"}">${d.drained ? "DRAINED" : "STABLE"}</span>
+    · ${d.before.date} → ${d.after.date}: open water ${(d.before.water_m2 / 1e6).toFixed(2)} → ${(d.after.water_m2 / 1e6).toFixed(2)} km²
+    (<b>${(d.area_loss * 100).toFixed(0)}%</b> lost)<div class="muted">2023 outburst replay. Alarm at 25% loss.</div>`;
+  LAKE.eta.forEach(p => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${p.name}</td><td>${p.river_km}</td><td>${p.eta_min}-${p.eta_max} min</td>`;
+    $("eta").appendChild(tr);
+  });
+  $("calib").textContent = `Calibrated on 2023: Chungthang reached ${LAKE.calibration.minutes_min}-${LAKE.calibration.minutes_max} min after the landslide → ${LAKE.speed_kmh.kmh_slow}-${LAKE.speed_kmh.kmh_fast} km/h.`;
+}
+
+function fmt(ms) {
+  if (ms <= 0) return "now";
+  const m = Math.floor(ms / 60000), s = Math.floor(ms % 60000 / 1000);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function renderAlerts(list) {
+  countdowns = [];
+  if (!list.length) { $("alerts").textContent = "No alerts."; $("status").className = "pill"; $("status").textContent = "WATCHING"; return; }
+  $("status").className = "pill alarm"; $("status").textContent = "ALERT";
+  const ev = list[0], t0 = Date.parse(ev.at_utc);
+  $("alerts").innerHTML = `<div class="muted">${ev.source_label}${ev.detail ? " · " + ev.detail : ""} · ${new Date(t0).toLocaleTimeString()}</div>` +
+    ev.messages.map((m, i) => `<div class="alert"><div class="row"><span class="t">${m.name}</span>
+      <span class="cd" id="cd${i}"></span></div><div class="sms">${m.channel.toUpperCase()} ${m.status} · ${m.text}</div></div>`).join("");
+  ev.messages.forEach((m, i) => countdowns.push({el: `cd${i}`, lo: t0 + m.eta_min * 60000, hi: t0 + m.eta_max * 60000}));
+}
+
+setInterval(() => {
+  const now = Date.now();
+  countdowns.forEach(c => { const e = $(c.el); if (e) e.textContent = `water in ${fmt(c.lo - now)} – ${fmt(c.hi - now)}`; });
+}, 1000);
+
+document.querySelectorAll("button.fire").forEach(b => b.onclick = async () => {
+  b.disabled = true;
+  try { await api("/api/trigger", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({source: b.dataset.src})});
+        renderAlerts(await api("/api/alerts")); }
+  catch (e) { alert(e.message); } finally { b.disabled = false; }
+});
+
+$("scanBtn").onclick = async () => {
+  $("scanBtn").disabled = true; $("scanOut").textContent = "Fetching the two latest Sentinel-1 passes over the lake…";
+  try {
+    await api("/api/scan", {method: "POST"});
+    for (;;) {
+      await new Promise(r => setTimeout(r, 3000));
+      const s = await api("/api/scan");
+      if (s.state === "running") { $("scanOut").textContent = `Scanning… ${Math.round(Date.now() / 1000 - s.started)} s`; continue; }
+      if (s.state === "error") { $("scanOut").textContent = "Scan failed: " + s.error; break; }
+      const r = s.result;
+      $("scanOut").innerHTML = `<span class="verdict ${r.drained ? "bad" : "ok"}">${r.drained ? "DRAINED" : "STABLE"}</span>
+        · ${r.before.date} → ${r.after.date}: ${(r.before.water_m2 / 1e6).toFixed(2)} → ${(r.after.water_m2 / 1e6).toFixed(2)} km²
+        (${(r.area_loss * 100).toFixed(1)}% change)`;
+      if (s.alert) renderAlerts(await api("/api/alerts"));
+      break;
+    }
+  } catch (e) { $("scanOut").textContent = "Scan failed: " + e.message; }
+  $("scanBtn").disabled = false;
+};
+
+async function doAsk() {
+  const q = $("q").value.trim(); if (!q) return;
+  $("ans").textContent = "…";
+  try { const a = await api("/api/ask", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({question: q})});
+        $("ans").innerHTML = a.answer + (a.evidence.length ? `<div class="muted">evidence: ${a.evidence.join(", ")}</div>` : ""); }
+  catch (e) { $("ans").textContent = e.message; }
+}
+$("askBtn").onclick = doAsk; $("q").onkeydown = e => { if (e.key === "Enter") doAsk(); };
+
+(async () => {
+  try { LAKE = await api("/api/lake"); }
+  catch (e) { $("sub").textContent = e.message; return; }
+  initMap(); initPanels(); renderAlerts(await api("/api/alerts"));
+})();
+</script>
+</body>
+</html>
