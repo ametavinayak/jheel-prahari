@@ -75,16 +75,41 @@ def test_alert_fires_one_message_per_place_and_rejects_unknown_source(tmp_path, 
 
 def test_ask_answers_from_measurements():
     rows, _ = _eta()
-    lake = {"lake": {"name": "Test"}, "eta": rows,
+    lake = {"lake": {"name": "Test"}, "eta": rows, "flowpath": {"length_km": 100.0},
+            "speed_kmh": {"kmh_slow": 40.0, "kmh_fast": 60.0},
             "series": [{"date": "2020-10-01", "area_km2": 1.0, "after_burst": False, "clear_over_lake": 1.0},
                        {"date": "2023-10-01", "area_km2": 1.5, "after_burst": False, "clear_over_lake": 1.0}],
             "growth": {"from": "2020-10-01", "to": "2023-10-01", "from_km2": 1.0, "to_km2": 1.5, "pct": 50.0,
                        "years": 3.0, "trend_km2_per_year": 0.167},
-            "drain_check": {"drained": True, "area_loss": 0.5, "before": {"date": "d1", "water_m2": 2e6},
+            "drain_check": {"drained": True, "area_loss": 0.5, "threshold_db": -15.0, "before": {"date": "d1", "water_m2": 2e6},
                             "after": {"date": "d2", "water_m2": 1e6}}}
-    assert "+50.0%" in ask.answer("has it grown?", lake)["answer"]
+    grown = ask.answer("has it grown?", lake)
+    assert "+50.0%" in grown["answer"] and [st["tool"] for st in grown["steps"]] == ["intent", "lake.series", "trend.theil_sen"]
     assert "drained" in ask.answer("did it burst?", lake)["answer"]
     rows[1]["name"] = "Dam Chungthang"
     assert "100-150 minutes" in ask.answer("when does water reach chungthang?", lake)["answer"]
     with pytest.raises(ValueError):
         ask.answer("  ", lake)
+
+
+def test_dark_clear_lake_with_negative_nir_is_water():
+    g, n, s = (np.array([[v]], "f4") for v in (0.014, -0.006, -0.004))
+    w, valid = segment.water_s2(g, n, s)
+    assert valid.all() and w.all()
+
+
+def test_static_lake_is_never_flagged_whatever_its_size():
+    from jheel import area
+    big_static = {"growth_pct": 1.0, "glacier_fed": False, "ice_contact": False, "area_km2": 5.0, "outlet_slope_deg": 30,
+                  "old_area_km2": 4.95, "new_lake": False}
+    assert area.classify(big_static)[1] == "stable"
+    glacial_flat = {**big_static, "glacier_fed": True, "growth_pct": 2.0}
+    assert area.classify(glacial_flat)[1] == "stable"
+    growing = {**glacial_flat, "growth_pct": 40.0, "ice_contact": True, "area_km2": 1.2, "old_area_km2": 0.857, "outlet_slope_deg": 12}
+    assert area.classify(growing)[1] == "high"
+    puddle = {**growing, "area_km2": 0.02, "old_area_km2": 0.005, "growth_pct": 300.0}
+    assert area.classify(puddle)[1] == "low"                       # big % of a puddle is not a hazard
+    unseen = {**growing, "old_area_km2": None, "growth_pct": None}
+    assert area.classify(unseen)[1] == "low"                       # history unknown is not "new"
+    tiny_new = {**growing, "area_km2": 0.06, "old_area_km2": 0.0, "growth_pct": None, "new_lake": True, "outlet_slope_deg": 0}
+    assert area.classify(tiny_new)[1] != "high"

@@ -46,7 +46,9 @@ def reflectance(dn, offset=0):
 def water_s2(green, nir, swir, scl=None, ndwi_t=0.2, nir_max=0.15):
     """Open water: NDWI above `ndwi_t` AND dark in near-infrared. MNDWI alone also lights up snow, which is
     bright in NIR; turbid glacial lakes stay dark there. Inputs are reflectances. Returns (mask, valid)."""
-    valid = np.isfinite(green) & (green > 0) & (nir > 0) & (swir > 0)
+    # No-data is marked by NaN upstream. Clear dark water can read slightly below zero after the L2A offset,
+    # so the sign of a reflectance says nothing about validity.
+    valid = np.isfinite(green) & np.isfinite(nir) & np.isfinite(swir)
     if scl is not None:
         # Sen2Cor labels bright, silty glacial water as cloud. Real cloud is bright in SWIR; water is not,
         # so a cloud label only counts where SWIR agrees.

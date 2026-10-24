@@ -10461,7 +10461,7 @@
    "date": "2023-08-30",
    "scene": "S2B_MSIL2A_20230830T044709_R076_T45RXL_20240912T075905",
    "area_km2": 1.6458,
-   "clear_over_lake": 0.869,
+   "clear_over_lake": 1.0,
    "after_burst": false,
    "outline": {
     "type": "Polygon",
@@ -20128,5 +20128,5 @@
   "drain": "Sentinel-1 RTC VV, 5x5 median, Otsu threshold on the pre pass, alarm at 25% loss",
   "flow": "Copernicus DEM GLO-30, pysheds fill + resolve flats + D8"
  },
- "built_s": 391
+ "built_s": 410
 }

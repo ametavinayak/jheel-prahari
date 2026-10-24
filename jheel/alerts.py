@@ -8,7 +8,8 @@ from pathlib import Path
 
 import requests
 
-LOG = Path(__file__).resolve().parent.parent / "data" / "alerts.jsonl"
+# JHEEL_STATE_DIR moves the log off a read-only deploy (serverless allows writes only under /tmp).
+LOG = Path(os.environ.get("JHEEL_STATE_DIR") or Path(__file__).resolve().parent.parent / "data") / "alerts.jsonl"
 SOURCES = {"drain_check": "Radar drain check", "gauge": "River gauge spike", "station": "Lake station alarm",
            "manual": "Control-room button"}
 _lock = threading.Lock()
@@ -53,7 +54,7 @@ def fire(lake, eta_rows, source, detail=None, now=None):
           "detail": detail, "at_utc": now.isoformat(timespec="seconds") + "Z", "messages": sends}
     with _lock:
         _events.insert(0, ev)
-        LOG.parent.mkdir(exist_ok=True)
+        LOG.parent.mkdir(parents=True, exist_ok=True)
         with LOG.open("a", encoding="utf-8") as f:
             f.write(json.dumps(ev) + "\n")
     return ev

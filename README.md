@@ -23,29 +23,56 @@ the Teesta-III dam at Chungthang.
 All imagery is public: ESA Copernicus Sentinel-1/2 and Copernicus DEM, read from Microsoft Planetary Computer.
 No account is needed.
 
+## Screening any area
+
+Search a place in the console, or pan the map and press **Analyse view**. For a box of about 18 km, the backend:
+
+1. Picks the clearest ice-free Sentinel-2 scene, plus one 5 to 8 years older.
+2. Finds every lake and matches each one across the two dates.
+3. Reads the Copernicus DEM for elevation and the slope of the valley below each lake.
+
+A lake is flagged only if it is **glacier-fed** (snow or ice within 500 m, above 3,500 m), **at least 0.05 km²**, and
+**measurably growing** (more than 5% and more than 0.02 km²). If the older scene was cloudy over a lake, its growth is
+marked unknown rather than counted as a new lake. The score is growth 40 + glacier contact 20 + size 20 + valley
+slope 20. It is a screening score of the kind used in published GLOF hazard rankings, not a probability.
+
+Checked on real areas:
+
+| Area | Result |
+|---|---|
+| South Lhonak, replayed as of 1 Oct 2023 (two days before it burst) | the only HIGH lake in the box: +27% since 2016, in contact with ice |
+| Gurudongmar lake (1.09 km², glacial) | **stable**: +0.5% since 2019; nearby lakes that did grow (e.g. +28%, +0.26 km²) are the ones flagged |
+| Tsomgo lake near Gangtok | **stable, not glacier-fed** (+9%, 3,751 m, no ice nearby) |
+
 ## Run it
 
 ```bash
 python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt      # Windows; .venv/bin/pip on Linux/macOS
-python -m jheel.pipeline                           # builds data/south-lhonak.json and web/scenes/ (~7 min)
-python -m uvicorn app:app --port 8000              # open http://localhost:8000
+python -m jheel.pipeline                           # optional: rebuilds data/south-lhonak.json (~7 min)
+python -m uvicorn app:app --port 8000              # API (+ a simple fallback page at :8000)
+
+cd frontend && npm install && npm run build && npm start   # the full app at http://localhost:3000
 python -m pytest tests                             # offline tests
 ```
+
+The Next.js app talks to the API only through its own `/api/jheel/*` route, which forwards a fixed list of
+endpoints. Set `JHEEL_API_URL` if the API isn't on `127.0.0.1:8000`.
 
 Optional environment:
 
 - `ALERT_WEBHOOK_URL`: POST each alert to an SMS gateway or siren controller instead of simulating it.
-- `VLM_URL`: send image questions the rule-based answers can't handle to a vision-language model service.
+- `VLM_URL`: send questions the measurements can't answer to a vision-language model service.
 
-## Dashboard
+## Frontend
 
-- Satellite map showing the lake outline for each year, the flood path and the downstream places.
-- Area chart and a year slider.
-- Radar drain check: the 2023 replay, plus a live scan on the latest passes. A live "drained" result fires an alert by itself.
-- Trigger buttons for a river gauge, a lake station and the control room.
-- Live countdown per place.
-- "Ask the lake" questions, answered from the measurements with the evidence named.
+- **Landing page (`/`)**: the real Sentinel-2 time-lapse of South Lhonak with its measured outline, stats that
+  count up from the API, how it works, the screening comparison and the 2023 proof.
+- **Console (`/console`)**: a satellite map with three panels.
+  - **Watched lake**: area chart and year slider, radar drain check with a live scan, triggers, per-place countdowns.
+  - **Area scan**: place search with every lake scored and outlined on the map.
+  - **Ask Lake AI**: answers from the measurements, with the steps behind each answer.
+- Built with Next.js 15, Tailwind 4, framer-motion and Leaflet.
 
 ## How it works
 
