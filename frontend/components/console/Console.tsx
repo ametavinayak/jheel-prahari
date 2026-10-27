@@ -3,7 +3,7 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { Crosshair, History, Loader2, Search, Sparkles, Waves, ScanSearch } from "lucide-react";
+import { Brain, Crosshair, History, Landmark, Loader2, Search, Sparkles, Waves, ScanSearch } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { AlertEvent, AreaJob, Lake } from "@/lib/api";
 import { api } from "@/lib/api";
@@ -11,10 +11,11 @@ import type { MapApi } from "./MapView";
 import { WatchPanel } from "./WatchPanel";
 import { ScanPanel } from "./ScanPanel";
 import { AskPanel } from "./AskPanel";
+import { MemoryPanel } from "./MemoryPanel";
 
 const MapView = dynamic(() => import("./MapView"), { ssr: false, loading: () => <div className="absolute inset-0 grid place-items-center text-faint"><Loader2 className="h-6 w-6 animate-spin" /></div> });
 
-type Tab = "watch" | "scan" | "ask";
+type Tab = "watch" | "scan" | "ask" | "memory";
 const REPLAY = "2023-10-01";
 
 export function Console() {
@@ -58,6 +59,23 @@ export function Console() {
     }
   }
 
+  async function loadWatchlist() {
+    polling.current += 1; setTab("scan"); setSelected(null);
+    try {
+      const w = await api.watchlist();
+      const xs = w.tiles.map((t) => t.box);
+      const box: [number, number, number, number] = [Math.min(...xs.map((b) => b[0])), Math.min(...xs.map((b) => b[1])), Math.max(...xs.map((b) => b[2])), Math.max(...xs.map((b) => b[3]))];
+      const dates = w.tiles.map((t) => t.recent).sort();
+      const olds = w.tiles.map((t) => t.older).filter((x): x is string => !!x).sort();
+      setJob({ id: "watchlist", state: "done", stage: "", error: null, started: 0, result: {
+        box, as_of: w.built, place: { name: `${w.region}: ${w.tiles.length} tiles screened together`, lat: (box[1] + box[3]) / 2, lon: (box[0] + box[2]) / 2 },
+        recent: { item: "", date: dates[dates.length - 1] ?? w.built, clear: 1 }, older: olds.length ? { item: "", date: olds[0], clear: 1 } : null,
+        lakes: w.lakes, counts: { ...w.counts, stable: 0 }, method: "" } });
+    } catch (e) {
+      setJob({ id: "", state: "error", stage: "", result: null, error: (e as Error).message, started: 0 });
+    }
+  }
+
   function analyseView() {
     const c = mapApi.current?.center();
     if (!c) return;
@@ -87,6 +105,7 @@ export function Console() {
           </div>
           <button type="submit" disabled={!query.trim() || running} className="rounded-xl bg-glacier px-3 py-2 text-sm font-medium text-ink transition hover:brightness-110 disabled:opacity-40">Screen</button>
           <button type="button" onClick={analyseView} disabled={running} title="Screen the area at the map centre" className="hidden items-center gap-1.5 rounded-xl border border-line px-3 py-2 text-sm text-muted transition hover:text-fg disabled:opacity-40 sm:flex"><Crosshair className="h-4 w-4" />Analyse view</button>
+          <button type="button" onClick={loadWatchlist} disabled={running} title="Ranked list of every lake screened across the North Sikkim glacier belt" className="hidden items-center gap-1.5 rounded-xl border border-watch/40 px-3 py-2 text-sm text-watch transition hover:bg-watch/10 disabled:opacity-40 lg:flex"><Landmark className="h-4 w-4" />Sikkim watchlist</button>
         </form>
 
         <button onClick={() => setReplay(!replay)} title="Screen as it would have looked on 1 Oct 2023, two days before South Lhonak burst"
@@ -121,7 +140,7 @@ export function Console() {
         {/* right rail */}
         <aside className="relative z-10 flex w-[420px] shrink-0 flex-col border-l border-line bg-ink/85 backdrop-blur-xl max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:h-[55vh] max-md:w-auto max-md:border-l-0 max-md:border-t">
           <nav className="flex gap-1 border-b border-line p-2">
-            {([["watch", "Watched lake", Waves], ["scan", "Area scan", ScanSearch], ["ask", "Ask Lake AI", Sparkles]] as const).map(([k, l, Icon]) => (
+            {([["watch", "Lake", Waves], ["scan", "Scan", ScanSearch], ["ask", "Ask AI", Sparkles], ["memory", "Memory", Brain]] as const).map(([k, l, Icon]) => (
               <button key={k} onClick={() => setTab(k)} className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition ${tab === k ? "text-fg" : "text-faint hover:text-muted"}`}>
                 {tab === k && <motion.span layoutId="tab" className="absolute inset-0 rounded-lg border border-line-strong bg-white/[.05]" transition={{ type: "spring", duration: 0.4 }} />}
                 <Icon className="relative h-3.5 w-3.5" /><span className="relative">{l}</span>
@@ -135,6 +154,7 @@ export function Console() {
                 {tab === "watch" && <WatchPanel lake={lake} sceneIdx={sceneIdx} setSceneIdx={setSceneIdx} alerts={alerts} setAlerts={setAlerts} />}
                 {tab === "scan" && <ScanPanel job={job} selected={selected} onSelect={setSelected} />}
                 {tab === "ask" && <AskPanel />}
+                {tab === "memory" && <MemoryPanel />}
               </motion.div>
             </AnimatePresence>
           </div>

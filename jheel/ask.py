@@ -9,6 +9,8 @@ from pathlib import Path
 
 import requests
 
+from . import reason
+
 ROOT = Path(__file__).resolve().parent.parent / "web"
 
 
@@ -23,6 +25,12 @@ class Trace:
         self._t = now
 
 
+def _growth(x):
+    if x["new_lake"]:
+        return "new lake"
+    return "growth unknown" if x["growth_pct"] is None else f"{x['growth_pct']:+.0f}%"
+
+
 def _place(q, eta):
     for row in eta:
         for word in re.split(r"[\s·\-]+", row["name"].lower()):
@@ -31,7 +39,7 @@ def _place(q, eta):
     return None
 
 
-def answer(q, lake):
+def _measured(q, lake, watch=None):
     ql = q.lower().strip()
     if not ql:
         raise ValueError("empty question")
@@ -78,6 +86,22 @@ def answer(q, lake):
         return out(f"{last['area_km2']:.2f} km² on {last['date']} (Sentinel-2, {last['clear_over_lake']:.0%} of the lake "
                    f"cloud-free). Before the 2023 burst: {pre[-1]['area_km2']:.2f} km² on {pre[-1]['date']}.",
                    ["series"], "area")
+    if watch and watch.get("lakes") and any(w in ql for w in ("dangerous", "riskiest", "most risk", "highest", "rank", "worst", "priority", "top lake", "which lake", "all lakes", "sikkim")):
+        tr.add("intent", "statewide ranking")
+        lk = watch["lakes"]
+        tr.add("watchlist.read", f"{len(watch['tiles'])} tiles, {len(lk)} lakes, built {watch['built']}", "Sentinel-2 + Copernicus DEM")
+        top = lk[:3]
+        lines = "; ".join(f"{x['id']}: score {x['score']} ({x['class']}), {x['area_km2']:.2f} km², {_growth(x)}, "
+                          f"{x['elevation_m']:,} m" for x in top)
+        c = watch["counts"]
+        return out(f"Across the {watch['region']} ({watch['built']}): {c['high']} high, {c['watch']} watch, {c['low']} low. "
+                   f"Top of the ranking: {lines}. South Lhonak, the lake that burst in 2023, is watched separately.",
+                   ["watchlist"], "ranking")
+    if any(w in ql for w in ("what should", "what do i do", "evacuat", "action", "safe", "advice", "advise")):
+        tr.add("intent", "what to do")
+        tr.add("action.table", f"{len(eta)} places", "action table")
+        lines = "; ".join(f"{r['name']}: {r['action']}" for r in eta)
+        return out(f"Each place gets its own instruction. {lines}", ["actions"], "action")
     if any(w in ql for w in ("who", "which", "places", "villages", "downstream", "risk")):
         tr.add("intent", "exposure")
         tr.add("dem.flowpath", f"{len(eta)} places within 2.5 km of the path", "Copernicus DEM GLO-30 + OSM")
@@ -107,3 +131,22 @@ def ask_vlm(q, scene, tr):
     except (requests.RequestException, ValueError) as e:
         tr.add("vlm.answer", f"unreachable: {type(e).__name__}", None)
         return {"answer": f"The vision-language model is unreachable ({type(e).__name__}).", "evidence": []}
+
+
+def answer(q, lake, watch=None, lang="en", explain=False):
+    """The measured answer, optionally re-worded by the GPU explainer. The measured text is always returned too, so a
+    reader (or a judge) can check the plain-language version against the numbers."""
+    res = _measured(q, lake, watch)
+    if lang not in reason.LANGS:
+        raise ValueError(f"unknown language {lang!r}")
+    if not (explain or lang != "en" or res["intent"] == "help") or not reason.url():
+        return {**res, "engine": "rules"}
+    try:
+        text, ms, dropped = reason.explain(q, res["answer"] if res["intent"] != "help" else "", reason.facts_for(q, lake, watch), lang)
+    except (requests.RequestException, RuntimeError, ValueError) as e:
+        res["steps"].append({"tool": "llm.explain", "detail": f"GPU explainer unavailable ({type(e).__name__}); measured answer shown",
+                             "source": None, "ms": 0})
+        return {**res, "engine": "rules"}
+    res["steps"].append({"tool": "llm.explain", "detail": f"{reason.MODEL}, {reason.LANGS[lang]}, facts only", "source": "GPU server", "ms": ms})
+    res["steps"].append({"tool": "llm.fact_check", "detail": f"each sentence checked against the facts; {dropped} unsupported removed", "source": "GPU server", "ms": 0})
+    return {**res, "answer": text, "measured": res["answer"], "engine": "gpu", "model": reason.MODEL, "lang": lang}

@@ -113,3 +113,36 @@ def test_static_lake_is_never_flagged_whatever_its_size():
     assert area.classify(unseen)[1] == "low"                       # history unknown is not "new"
     tiny_new = {**growing, "area_km2": 0.06, "old_area_km2": 0.0, "growth_pct": None, "new_lake": True, "outlet_slope_deg": 0}
     assert area.classify(tiny_new)[1] != "high"
+
+
+def test_alert_is_sent_in_three_languages_and_unknown_action_stays_english():
+    import datetime as dt
+    from jheel import alerts
+    row = {"id": "x", "name": "Lachen", "kind": "village", "river_km": 1, "eta_min": 78, "eta_max": 99,
+           "action": "Move everyone uphill, away from the river, now."}
+    now = dt.datetime(2026, 10, 27, 0, 0)
+    texts = {lg: alerts.message("South Lhonak", row, now, lg) for lg in alerts.LANGS}
+    assert "78-99" in texts["en"] and "78-99" in texts["hi"] and "78-99" in texts["ne"]
+    assert texts["hi"] != texts["en"] and texts["ne"] != texts["hi"]
+    assert "ऊँचाई" in texts["hi"] and "उकालि" in texts["ne"]
+    odd = {**row, "action": "Some new action."}
+    assert alerts.message("L", odd, now, "hi").endswith("Some new action.")
+
+
+def test_growing_pond_is_not_a_high_hazard_but_a_big_lake_is():
+    from jheel import area
+    pond = {"growth_pct": 80.8, "glacier_fed": True, "ice_contact": True, "area_km2": 0.056, "old_area_km2": 0.031,
+            "new_lake": False, "outlet_slope_deg": 8}
+    assert area.classify(pond)[1] != "high"      # the Gurudongmar L1 case: 5,600 m2 of water ranked HIGH before
+    lake = {**pond, "growth_pct": 30.0, "area_km2": 1.65, "old_area_km2": 1.27, "outlet_slope_deg": 8}
+    assert area.classify(lake)[1] == "high"       # South Lhonak, replayed
+
+
+def test_an_unwritable_alert_log_never_stops_the_alarm(tmp_path, monkeypatch):
+    from jheel import alerts
+    monkeypatch.setattr(alerts, "LOG", tmp_path / "file-not-dir" / "alerts.jsonl")
+    (tmp_path / "file-not-dir").write_text("x")           # a file where the log's folder should be: mkdir and open both fail
+    alerts.reset()
+    row = {"id": "x", "name": "Lachen", "kind": "village", "river_km": 1, "eta_min": 78, "eta_max": 99, "action": "Move uphill."}
+    ev = alerts.fire({"id": "l", "name": "L"}, [row], "manual")
+    assert len(ev["messages"]) == 1 and ev["logged"] is False and alerts.recent(1)[0]["id"] == ev["id"]

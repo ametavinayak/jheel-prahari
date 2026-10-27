@@ -5,3 +5,5 @@ out/
 data/dem_teesta.tif
 data/alerts.jsonl
 PLAN.md
+
+.hs-venv/

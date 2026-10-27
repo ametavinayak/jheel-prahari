@@ -21,11 +21,20 @@ export type Lake = {
   calibration: { asset: string; minutes_min: number; minutes_max: number };
   method: Record<string, string>;
 };
-export type AlertMsg = { place: string; name: string; kind: string; river_km: number; eta_min: number; eta_max: number; text: string; channel: string; status: string };
+export type AlertMsg = { place: string; name: string; kind: string; river_km: number; eta_min: number; eta_max: number; text: string; texts?: Record<string, string>; channel: string; status: string };
 export type AlertEvent = { id: string; lake: string; source: string; source_label: string; detail: string | null; at_utc: string; messages: AlertMsg[] };
 export type ScanState = { state: "idle" | "running" | "done" | "error"; result: DrainCheck | null; error: string | null; started: number | null; alert: AlertEvent | null };
 export type Step = { tool: string; detail: string; source: string | null; ms: number };
-export type Answer = { answer: string; evidence: string[]; intent: string; steps: Step[] };
+export type Answer = { answer: string; evidence: string[]; intent: string; steps: Step[]; engine?: "rules" | "gpu"; measured?: string; model?: string };
+export type MemoryStatus = { ok: boolean; bank: string; error: string | null; version?: string | null; gpu_reader: boolean };
+export type Recalled = { text: string; type: string | null; when: string | null };
+export type Triage = {
+  source: string; radar: string; memory: boolean; decision: string; label: string; why: string;
+  without_memory?: { decision: string; label: string; why: string }; recalled: Recalled[]; false_alarms: number;
+  false_alarm_ids: number[]; lessons: { text: string; memory: number; from: string; when: string | null }[]; reader_ms: number; note?: string;
+};
+export type Briefing = { bullets: { heading: string; text: string; memories: number[] }[]; memories: number; ms?: number; note?: string };
+export type Capabilities = { gpu_explainer: boolean; model: string | null; langs: Record<string, string> };
 
 export type AreaLake = {
   id: string; class: "high" | "watch" | "low" | "stable"; score: number; why: string;
@@ -37,6 +46,11 @@ export type AreaResult = {
   box: [number, number, number, number]; as_of: string; place: { name: string; lat: number; lon: number } | null;
   recent: { item: string; date: string; clear: number }; older: { item: string; date: string; clear: number } | null;
   lakes: AreaLake[]; counts: Record<"high" | "watch" | "low" | "stable", number>; method: string;
+};
+export type Watchlist = {
+  built: string; region: string; counts: Record<"high" | "watch" | "low", number>;
+  tiles: { tile: string; box: [number, number, number, number]; recent: string; older: string | null }[];
+  failed: { tile: string; error: string }[]; lakes: (AreaLake & { tile: string })[];
 };
 export type AreaJob = { id: string; state: "running" | "done" | "error"; stage: string; result: AreaResult | null; error: string | null; started: number };
 
@@ -55,9 +69,15 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
 
 export const api = {
   lake: () => call<Lake>("lake"),
+  watchlist: () => call<Watchlist>("watchlist"),
   alerts: () => call<AlertEvent[]>("alerts"),
   trigger: (source: string) => call<AlertEvent>("trigger", { source }),
-  ask: (question: string) => call<Answer>("ask", { question }),
+  ask: (question: string, lang = "en", explain = false) => call<Answer>("ask", { question, lang, explain }),
+  capabilities: () => call<Capabilities>("capabilities"),
+  memoryStatus: () => call<MemoryStatus>("memory/status"),
+  triage: (source: string, radar: string, use_memory: boolean) => call<Triage>("memory/triage", { source, radar, use_memory }),
+  memoryLog: (text: string, outcome?: string, trigger?: string) => call<{ stored: boolean }>("memory/log", { text, outcome, trigger }),
+  briefing: () => call<Briefing>("memory/briefing", {}),
   startScan: () => call<ScanState>("scan", {}),
   scan: () => call<ScanState>("scan"),
   analyze: (req: { query?: string; bbox?: number[]; as_of?: string }) => call<AreaJob>("analyze", req),

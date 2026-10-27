@@ -28,6 +28,7 @@ ICE_BUFFER_M = 500
 CONTACT_M = 100
 GLACIAL_MIN_ELEV = 3500
 HAZARD_MIN_KM2 = 0.05     # smaller lakes cannot hold enough water to threaten the valley
+VOLUME_FULL_KM2 = 0.2     # growth earns full points only from this size up
 GROWTH_MIN_KM2 = 0.02     # growth must be real in absolute terms, not a big % of a puddle
 OLD_CLEAR_MIN = 0.8       # the older scene must actually see the lake's footprint
 SEASON = (8, 11)
@@ -140,11 +141,12 @@ def classify(lk):
         return 0, "low", "Glacier-fed; the older scene was cloudy or snow-covered here, so growth is unknown. Rescan."
     gained = area - lk["old_area_km2"]
     if lk["new_lake"]:
-        growth_pts = 30  # new lake: growth is real but its rate is unknown
+        growth_pts = 30 * min(area / VOLUME_FULL_KM2, 1)  # new lake: growth is real but its rate is unknown
     elif g is None or g <= 5 or gained < GROWTH_MIN_KM2:
         return 0, "stable", f"Glacier-fed but not growing ({(g or 0):+.0f}%, {gained:+.3f} km²)."
     else:
-        growth_pts = 40 * min(g / 50, 1)
+        # growth counts for what a lake can release: a fast-growing pond is not a flood threat
+        growth_pts = 40 * min(g / 50, 1) * min(area / VOLUME_FULL_KM2, 1)
     score = round(growth_pts + (20 if lk["ice_contact"] else 0) + 20 * min(area / 1.0, 1)
                   + 20 * min((lk["outlet_slope_deg"] or 0) / 20, 1))
     lead = "New glacial lake" if lk["new_lake"] else f"Glacier-fed, grew {g:+.0f}% ({gained:+.2f} km²)"

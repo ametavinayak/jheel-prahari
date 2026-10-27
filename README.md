@@ -94,6 +94,53 @@ Copernicus DEM ──► flow path ──► arrival-time table ┘   (lookups o
 - `jheel/alerts.py`: the alert engine. `jheel/ask.py`: question answering over the measurements.
 - `app.py`: FastAPI server. `web/index.html`: Leaflet dashboard.
 
+## Jheel Smriti: the control room's memory (Hindsight)
+
+An agent that remembers every alert, drill and field check, so it can tell a river gauge that cries wolf from a real
+drain. Memory lives in [Hindsight](https://github.com/vectorize-io/hindsight) (retain, recall, metadata, a bank with a
+mission and a disposition). Console: the **Memory** tab.
+
+**The decision is a fixed rule, one-sided on purpose** (`jheel/triage.py`):
+
+| Radar pass after the trigger | False alarms from this source in memory | Decision |
+|---|---|---|
+| drained (25% or more of open water gone) | any | **SEND ALL NOW**: memory can never hold back a confirmed drain |
+| calm | 2 or more | HOLD for at most 10 minutes (the nearest place has 78), then alerts go out automatically |
+| calm | 1 | STAND BY (warn the dam crew, verify) |
+| calm | 0 | SEND ALL (precaution) |
+| older than 12 hours | any | treated as no pass, never as calm: STAND BY at most |
+| a second independent source agrees | any | SEND ALL NOW |
+
+- **Retain**: every event is stored with the date it happened and metadata (`trigger`, outcome as the memory's kind).
+  Officers add notes in the console ("Teach it"); fired alerts are retained when `JHEEL_MEMORY=1`.
+- **Recall**: on a trigger the agent recalls the history for that source. The false-alarm count is read from
+  Hindsight's returned metadata (distinct stored events), never counted by a language model.
+- **Lessons** (`triage._lessons`): a second, targeted recall feeds a model that only **picks** which memories matter. The lessons
+  shown are those memories' own sentences, word for word, with their dates, so nothing is paraphrased. They still appear if the
+  GPU is down.
+- **Handover briefing** (`jheel/briefing.py`): several recalls become one briefing, numbers checked against the originals.
+- **Plain-language answers** (`jheel/reason.py`, Ask AI): the model sees only the facts relevant to the question; each
+  sentence must be backed by a quoted fact line or it is removed; the measured answer is always shown beside it.
+
+The seeded history (`scripts/seed_memory.py`) is the documented 2023 record plus a **synthetic exercise log**, labelled
+EXERCISE inside the memory itself. It is not real incident data.
+
+```bash
+python -m venv .hs-venv
+.hs-venv/Scripts/pip install "hindsight-api-slim[embedded-db,local-onnx]" hindsight-client
+scripts/start_hindsight.ps1                     # memory server on :8888 (LLM: Ollama, default qwen3:8b)
+export OLLAMA_URL=http://127.0.0.1:11434        # the GPU server for lessons and plain-language answers
+.venv/Scripts/python scripts/seed_memory.py --reset
+.venv/Scripts/python -m uvicorn app:app --port 8000
+.venv/Scripts/python scripts/e2e_memory.py      # drives the real HTTP API: 6 PASS expected
+```
+
+Without a Hindsight server the Memory tab says so (or, on a deployment with `public/recorded-memory.json`, replays a
+recorded run and is labelled RECORDED RUN). The alert path never uses AI: it is a table lookup.
+
+Other additions: alerts in English, Hindi and Nepali (the Hindi and Nepali texts need native review before any real send),
+and `scripts/build_watchlist.py`, a ranked screening of the North Sikkim glacier belt (`data/watchlist.json`).
+
 ## Limits
 
 - We watch and rank lakes; we do not predict when one will burst.
@@ -104,6 +151,7 @@ Copernicus DEM ──► flow path ──► arrival-time table ┘   (lookups o
 - The segmenter is the threshold baseline. A learned U-Net must beat it on held-out lakes
   before it replaces it.
 - Downstream places are a hand-picked list of five (OpenStreetMap coordinates), not a full asset inventory.
+- The memory history is a labelled synthetic exercise log until a control room supplies real entries; SMS sending is simulated.
 
 ## Sources
 

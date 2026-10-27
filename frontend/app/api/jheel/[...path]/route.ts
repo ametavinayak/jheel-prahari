@@ -7,10 +7,10 @@ const TOKEN = process.env.JHEEL_API_TOKEN;
 const MAX_BODY = 64 * 1024;
 // A serverless API runs a scan or an area analysis inside the request (about a minute, sometimes more).
 export const maxDuration = 300;
-const SLOW = /^(scan|analyze)$/;
+const SLOW = /^(scan|analyze|memory\/(triage|briefing|log))$/;
 
-const GET_OK = [/^lake$/, /^alerts$/, /^scan$/, /^analyze\/[0-9a-f]{10}$/, /^scenes\/\d{4}-\d{2}-\d{2}\.png$/];
-const POST_OK = [/^trigger$/, /^ask$/, /^scan$/, /^analyze$/];
+const GET_OK = [/^lake$/, /^watchlist$/, /^capabilities$/, /^memory\/status$/, /^alerts$/, /^scan$/, /^analyze\/[0-9a-f]{10}$/, /^scenes\/\d{4}-\d{2}-\d{2}\.png$/];
+const POST_OK = [/^trigger$/, /^memory\/(triage|log|briefing)$/, /^ask$/, /^scan$/, /^analyze$/];
 
 function target(path: string) {
   return path.startsWith("scenes/") ? `${BACKEND}/${path}` : `${BACKEND}/api/${path}`;

@@ -10,7 +10,7 @@ cp "$root/app.py" "$out/"
 cp "$root/requirements-serve.txt" "$out/requirements.txt"
 cp "$root"/jheel/*.py "$out/jheel/"
 cp "$root/web/index.html" "$root/web/logo.png" "$out/web/"
-cp "$root/data/south-lhonak.json" "$out/data/"
+cp "$root/data/south-lhonak.json" "$root/data/watchlist.json" "$out/data/"
 # rasterio's Linux wheel links the system libexpat, which Vercel's runtime lacks: ship Debian 11's
 # (deploy/vercel/libexpat.so.1, expat 2.2.10); jheel/__init__.py loads it before rasterio is imported.
 mkdir -p "$out/lib" && cp "$root/deploy/vercel/libexpat.so.1" "$out/lib/"

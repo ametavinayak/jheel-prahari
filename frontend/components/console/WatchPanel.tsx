@@ -31,6 +31,7 @@ export function WatchPanel({ lake, sceneIdx, setSceneIdx, alerts, setAlerts }: {
   const [scan, setScan] = useState<ScanState | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [lang, setLang] = useState<"en" | "hi" | "ne">("en");
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
 
@@ -119,7 +120,9 @@ export function WatchPanel({ lake, sceneIdx, setSceneIdx, alerts, setAlerts }: {
         {err && <div className="mt-2 text-sm text-alarm">{err}</div>}
       </Card>
 
-      <Card title="ALERTS" icon={Siren} tone="alarm" right={ev && <span className="font-mono text-[10px] text-muted">{ev.source_label} · {new Date(t0).toLocaleTimeString()}</span>}>
+      <Card title="ALERTS" icon={Siren} tone="alarm" right={ev && <span className="flex items-center gap-2">{([["en", "EN"], ["hi", "हिन्दी"], ["ne", "नेपाली"]] as const).map(([k, l]) => (
+          <button key={k} onClick={() => setLang(k)} className={`rounded-md px-1.5 py-0.5 text-[11px] transition ${lang === k ? "bg-alarm text-ink font-semibold" : "text-muted hover:text-fg"}`}>{l}</button>))}
+          <span className="font-mono text-[10px] text-muted">{ev.source_label} · {new Date(t0).toLocaleTimeString()}</span></span>}>
         {!ev ? <div className="text-sm text-faint">No alerts. A drained lake or any trigger sends one message per place on the flood path.</div> : (
           <div className="space-y-2">
             {ev.messages.map((m) => {
@@ -130,7 +133,7 @@ export function WatchPanel({ lake, sceneIdx, setSceneIdx, alerts, setAlerts }: {
                     <span className="text-sm font-medium">{m.name}</span>
                     <span className="flex items-center gap-1 font-mono text-sm font-semibold tabular-nums text-alarm"><Timer className="h-3.5 w-3.5" />{fmt(lo)} – {fmt(hi)}</span>
                   </div>
-                  <div className="mt-1 text-xs leading-relaxed text-muted"><span className="font-mono text-[10px] uppercase text-faint">{m.channel} {m.status} · </span>{m.text}</div>
+                  <div className="mt-1 text-xs leading-relaxed text-muted"><span className="font-mono text-[10px] uppercase text-faint">{m.channel} {m.status} · </span>{m.texts?.[lang] ?? m.text}</div>
                 </motion.div>
               );
             })}

@@ -1,9 +1,9 @@
 "use client";
 // Chat with Lake AI. Each answer shows the steps the server actually ran, as tool-call cards.
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUp, ChevronRight, Cpu, Sparkles } from "lucide-react";
+import { ArrowUp, ChevronRight, Cpu, Sparkles, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { Answer } from "@/lib/api";
+import type { Answer, Capabilities } from "@/lib/api";
 import { api } from "@/lib/api";
 
 type Msg = { role: "user"; text: string } | { role: "ai"; data: Answer } | { role: "error"; text: string };
@@ -51,13 +51,17 @@ export function AskPanel() {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const end = useRef<HTMLDivElement>(null);
+  const [caps, setCaps] = useState<Capabilities | null>(null);
+  const [lang, setLang] = useState<"en" | "hi" | "ne">("en");
+  const [simple, setSimple] = useState(false);
+  useEffect(() => { api.capabilities().then(setCaps).catch(() => setCaps(null)); }, []);
   useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy]);
 
   async function send(text: string) {
     const t = text.trim();
     if (!t || busy) return;
     setQ(""); setMsgs((m) => [...m, { role: "user", text: t }]); setBusy(true);
-    try { const data = await api.ask(t); setMsgs((m) => [...m, { role: "ai", data }]); }
+    try { const data = await api.ask(t, lang, simple); setMsgs((m) => [...m, { role: "ai", data }]); }
     catch (e) { setMsgs((m) => [...m, { role: "error", text: (e as Error).message }]); }
     finally { setBusy(false); }
   }
@@ -82,6 +86,8 @@ export function AskPanel() {
             <Orb />
             <div className="min-w-0 flex-1">
               <div className="text-sm leading-relaxed">{m.data.answer}</div>
+              {m.data.engine === "gpu" && <div className="mt-1.5 flex items-center gap-1.5 font-mono text-[10px] text-glacier"><Zap className="h-3 w-3" />explained on GPU · {m.data.model} · facts only</div>}
+              {m.data.measured && m.data.intent !== "help" && <div className="mt-1.5 rounded-lg border border-line bg-white/[.02] px-2.5 py-1.5 text-[11px] text-muted"><span className="font-mono text-[10px] text-faint">MEASURED · </span>{m.data.measured}</div>}
               {m.data.evidence.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{m.data.evidence.map((e) => <span key={e} className="rounded-md border border-line px-1.5 py-0.5 font-mono text-[10px] text-muted">{e}</span>)}</div>}
               <Steps data={m.data} />
             </div>
@@ -93,6 +99,14 @@ export function AskPanel() {
         <div ref={end} />
       </div>
       <form onSubmit={(e) => { e.preventDefault(); send(q); }} className="border-t border-line p-3">
+        {caps?.gpu_explainer && (
+          <div className="mb-2 flex items-center gap-1.5 text-[11px]">
+            <Zap className="h-3 w-3 text-glacier" />
+            {([["en", "EN"], ["hi", "हिन्दी"], ["ne", "नेपाली"]] as const).map(([k, l]) => (
+              <button type="button" key={k} onClick={() => setLang(k)} className={`rounded-md px-1.5 py-0.5 transition ${lang === k ? "bg-glacier text-ink font-semibold" : "text-muted hover:text-fg"}`}>{l}</button>))}
+            <button type="button" onClick={() => setSimple(!simple)} className={`ml-auto rounded-md border px-2 py-0.5 transition ${simple ? "border-glacier/60 bg-glacier/10 text-glacier" : "border-line text-muted hover:text-fg"}`}>Explain simply</button>
+          </div>
+        )}
         <div className="flex items-center gap-2 rounded-xl border border-line bg-ink/60 px-3 py-2 focus-within:border-glacier/50">
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask about area, growth, drainage, arrival times…" className="flex-1 bg-transparent text-sm outline-none placeholder:text-faint" />
           <button disabled={!q.trim() || busy} className="grid h-7 w-7 place-items-center rounded-lg bg-glacier text-ink transition disabled:opacity-30" aria-label="Send"><ArrowUp className="h-4 w-4" /></button>
