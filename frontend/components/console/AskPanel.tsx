@@ -5,6 +5,7 @@ import { ArrowUp, ChevronRight, Cpu, Sparkles, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Answer, Capabilities } from "@/lib/api";
 import { api } from "@/lib/api";
+import { Working } from "./Working";
 
 type Msg = { role: "user"; text: string } | { role: "ai"; data: Answer } | { role: "error"; text: string };
 const SUGGEST = ["Has the lake grown?", "Did it drain in 2023?", "When does water reach Chungthang?", "Which places are on the flood path?"];
@@ -20,7 +21,7 @@ function Orb({ busy }: { busy?: boolean }) {
 }
 
 function Steps({ data }: { data: Answer }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   if (!data.steps?.length) return null;
   const total = data.steps.reduce((a, s) => a + s.ms, 0);
   return (
@@ -95,7 +96,7 @@ export function AskPanel() {
         ) : (
           <div key={i} className="text-sm text-alarm">{m.text}</div>
         ))}
-        {busy && <div className="flex items-center gap-2.5"><Orb busy /><div className="shimmer h-4 w-40 rounded" /></div>}
+        {busy && <div className="flex items-start gap-2.5"><Orb busy /><div className="flex-1"><Working title="LAKE AI IS WORKING" steps={["Understand the question", "Measure the facts from satellite data", "Word the answer from those facts only (Qwen3 on our GPU)", "Check every sentence against the facts"]} /></div></div>}
         <div ref={end} />
       </div>
       <form onSubmit={(e) => { e.preventDefault(); send(q); }} className="border-t border-line p-3">

@@ -8,6 +8,7 @@ import type { Briefing, MemoryStatus, Triage } from "@/lib/api";
 
 type Recorded = { captured: string; model: string; triage: Record<string, Triage>; briefing: Briefing };
 import { api } from "@/lib/api";
+import { Trace, Working } from "./Working";
 
 const SOURCES = [["gauge", "River gauge"], ["station", "Lake station"], ["manual", "Control room"]] as const;
 const TONE: Record<string, string> = {
@@ -106,6 +107,7 @@ export function MemoryPanel() {
         <button onClick={run} disabled={!online || busy === "triage"} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-alarm px-3 py-2 text-sm font-semibold text-ink transition hover:brightness-110 disabled:opacity-40">
           {busy === "triage" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Siren className="h-4 w-4" />}{busy === "triage" ? "Recalling from memory…" : "Fire the trigger"}
         </button>
+        {busy === "triage" && <Working title="THE MEMORY AGENT IS WORKING" steps={["Recall this source's history from Hindsight", "Count its false alarms from memory metadata", "Apply the fixed safety rule", "Pick the lessons that matter (Qwen3 on our GPU)"]} />}
         {res && off && (
           <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mt-3 space-y-2">
             <div className="text-xs text-muted">{res.radar}</div>
@@ -116,6 +118,7 @@ export function MemoryPanel() {
             {res.decision === "SEND_ALL_NOW" && radar === "drained" && (
               <div className="flex items-start gap-2 rounded-lg border border-safe/30 bg-safe/5 p-2.5 text-[11px] text-muted"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-safe" />Safety rule: memory can make the agent more careful about an unconfirmed trigger, but it can never hold back a radar-confirmed drain.</div>
             )}
+            {res.steps && <Trace title="HOW IT DECIDED" steps={res.steps} />}
             {res.lessons?.length > 0 && (
               <div className="rounded-lg border border-line p-2.5"><div className="font-mono text-[10px] tracking-[.14em] text-faint">LESSONS IT APPLIED</div><ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-muted">{res.lessons.map((l, i) => <li key={i}>{l.text}<div className="font-mono text-[10px] text-faint">from memory{l.when ? ` · ${l.when.slice(0, 10)}` : ""}: {l.from}</div></li>)}</ul></div>
             )}
@@ -154,6 +157,7 @@ export function MemoryPanel() {
       <section className="glass rounded-2xl p-4">
         <h3 className="flex items-center gap-2 font-mono text-[11px] tracking-[.18em] text-glacier"><BookOpenText className="h-3.5 w-3.5" />SHIFT HANDOVER</h3>
         <button onClick={briefing} disabled={!online || busy === "brief"} className="mt-2 flex items-center gap-1.5 rounded-lg border border-glacier/40 bg-glacier/10 px-3 py-1.5 text-xs font-medium text-glacier disabled:opacity-40">{busy === "brief" && <Loader2 className="h-3 w-3 animate-spin" />}Brief the incoming officer</button>
+        {busy === "brief" && <Working title="WRITING THE HANDOVER" steps={["Recall what happened, from Hindsight", "Recall which sources to trust and what failed", "Write one briefing (Qwen3 on our GPU)", "Check every number against the records"]} />}
         {brief && (
           <div className="mt-2 space-y-2">
             {brief.note && <p className="text-xs text-muted">{brief.note}</p>}

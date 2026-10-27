@@ -32,6 +32,7 @@ export type Triage = {
   source: string; radar: string; memory: boolean; decision: string; label: string; why: string;
   without_memory?: { decision: string; label: string; why: string }; recalled: Recalled[]; false_alarms: number;
   false_alarm_ids: number[]; lessons: { text: string; memory: number; from: string; when: string | null }[]; reader_ms: number; note?: string;
+  steps?: { name: string; detail: string; ms: number }[];
 };
 export type Briefing = { bullets: { heading: string; text: string; memories: number[] }[]; memories: number; ms?: number; note?: string };
 export type Capabilities = { gpu_explainer: boolean; model: string | null; langs: Record<string, string> };

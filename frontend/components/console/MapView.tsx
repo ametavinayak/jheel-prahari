@@ -1,13 +1,13 @@
 "use client";
 // Leaflet map for the console. Leaflet touches `window`, so it is imported inside effects only.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type * as Leaflet from "leaflet";
 import type { AreaLake, AreaResult, Lake } from "@/lib/api";
 import { sceneUrl } from "@/lib/api";
 
 export const CLASS_COLOR: Record<AreaLake["class"], string> = { high: "#ff7a3d", watch: "#ffc24b", low: "#4fe3f0", stable: "#3ddc97" };
 
-export type MapApi = { center: () => [number, number]; flyTo: (lat: number, lon: number, zoom?: number) => void };
+export type MapApi = { center: () => [number, number]; flyTo: (lat: number, lon: number, zoom?: number) => void; showPath: () => void };
 
 type Props = {
   lake: Lake;
@@ -27,6 +27,9 @@ export default function MapView({ lake, sceneIdx, showWatched, area, selected, o
   const scene = useRef<Leaflet.LayerGroup | null>(null);
   const areaLayer = useRef<Leaflet.LayerGroup | null>(null);
   const lakeLayers = useRef<Record<string, Leaflet.GeoJSON>>({});
+  // Leaflet loads asynchronously: the layer effects below must run again once the map exists, or data that arrived
+  // first (the lake outline, an area result) is never drawn.
+  const [ready, setReady] = useState(false);
 
   // map + static watched-lake layers
   useEffect(() => {
@@ -60,9 +63,11 @@ export default function MapView({ lake, sceneIdx, showWatched, area, selected, o
       scene.current = lib.layerGroup().addTo(m);
       areaLayer.current = lib.layerGroup().addTo(m);
       map.current = m;
+      setReady(true);
       onReady({
         center: () => { const c = m.getCenter(); return [c.lat, c.lng]; },
         flyTo: (la, lo, z = 13) => m.flyTo([la, lo], z, { duration: 1.4 }),
+        showPath: () => m.flyToBounds(lib.geoJSON(lake.flowpath).getBounds().pad(0.08), { duration: 1.4 }),
       });
     })();
     return () => { alive = false; map.current?.remove(); map.current = null; };
@@ -82,7 +87,7 @@ export default function MapView({ lake, sceneIdx, showWatched, area, selected, o
     } else if (m.hasLayer(w)) {
       m.removeLayer(w);
     }
-  }, [lake, sceneIdx, showWatched]);
+  }, [lake, sceneIdx, showWatched, ready]);
 
   // area screening results
   useEffect(() => {
@@ -103,7 +108,7 @@ export default function MapView({ lake, sceneIdx, showWatched, area, selected, o
     });
     m.flyToBounds([[s, w], [n, e]], { duration: 1.4, padding: [30, 30] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [area]);
+  }, [area, ready]);
 
   // highlight the selected lake
   useEffect(() => {
@@ -113,7 +118,7 @@ export default function MapView({ lake, sceneIdx, showWatched, area, selected, o
       layer.setStyle({ weight: id === selected ? 4 : lk.class === "stable" ? 1.5 : 2.5, color: id === selected ? "#ffffff" : CLASS_COLOR[lk.class] });
       if (id === selected) map.current?.flyToBounds(layer.getBounds().pad(1.2), { duration: 1, maxZoom: 15 });
     });
-  }, [selected, area]);
+  }, [selected, area, ready]);
 
   return <div ref={el} className="absolute inset-0" />;
 }

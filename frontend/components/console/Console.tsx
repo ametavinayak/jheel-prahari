@@ -124,6 +124,10 @@ export function Console() {
             <div className="glass-dark pointer-events-auto rounded-xl px-3 py-2">
               <div className="font-mono text-[10px] text-faint">WATCHED LAKE</div>
               <button onClick={() => { setTab("watch"); mapApi.current?.flyTo(lake.lake.seed[1], lake.lake.seed[0], 13); }} className="flex items-center gap-2 text-sm font-medium hover:text-glacier"><Waves className="h-3.5 w-3.5 text-glacier" />{lake.lake.name}, Sikkim</button>
+              <div className="mt-1.5 flex gap-1.5 font-mono text-[10px]">
+                <button onClick={() => mapApi.current?.flyTo(lake.lake.seed[1], lake.lake.seed[0], 14)} className="rounded-md border border-glacier/40 px-2 py-0.5 text-glacier hover:bg-glacier/10">Lake outline</button>
+                <button onClick={() => mapApi.current?.showPath()} className="rounded-md border border-alarm/40 px-2 py-0.5 text-alarm hover:bg-alarm/10">Flood path</button>
+              </div>
             </div>
           </div>
           <div className="pointer-events-none absolute bottom-4 left-4 z-[500] glass-dark rounded-xl px-3 py-2 font-mono text-[10px] text-muted">

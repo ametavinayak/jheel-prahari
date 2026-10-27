@@ -13,6 +13,7 @@ deliberately simple and one-sided:
 So memory can make the agent more careful about an unconfirmed trigger and can never talk it out of a confirmed one."""
 import json
 import re
+import time
 
 from . import alerts, memory, reason
 
@@ -126,12 +127,14 @@ def triage(source, radar_loss, lake, use_memory=True, radar_age_hours=None, corr
     confirmed = (radar_loss is not None and radar_loss >= DRAIN_ALARM) or corroborated
     q = (f"Past triggers from the {alerts.SOURCES[source].lower()} at {name}: were they false alarms or real, what did radar show, "
          f"and what did we learn about alerting places and opening dam gates?")
+    t0 = time.perf_counter()
     mems = memory.recall(q, n=8)
     seen = {m["text"] for m in mems}
     for m in memory.recall(f"false alarm {alerts.SOURCES[source].lower()}", n=8, budget="low"):   # make sure none are missed
         if m["text"] not in seen:
             mems.append(m)
     out["recalled"] = mems
+    recall_ms = round((time.perf_counter() - t0) * 1000)
     docs = _false_alarm_docs(mems, source)
     fa = len(docs)
     note = None
@@ -158,9 +161,16 @@ def triage(source, radar_loss, lake, use_memory=True, radar_age_hours=None, corr
         dec = "SEND_ALL_NOW"
         why = "Nothing in memory says this source is unreliable, so a trigger is treated as real as a precaution."
     out.update(decision=dec, label=DECISIONS[dec], why=why)
+    rule_in = ("radar drained" if confirmed and not corroborated else "second source agrees" if corroborated else
+               "radar calm" if radar_loss is not None else "no fresh radar pass")
+    steps = [{"name": "Recall from Hindsight", "detail": f"history of the {alerts.SOURCES[source].lower()} at {name}: {len(mems)} memories", "ms": recall_ms},
+             {"name": "Count false alarms", "detail": f"{fa} distinct false-alarm events, read from memory metadata", "ms": 0},
+             {"name": "Apply the fixed rule", "detail": f"{rule_in}, {fa} false alarm{'s' if fa != 1 else ''} -> {DECISIONS[dec]}", "ms": 0}]
     try:
         out["lessons"], out["reader_ms"] = _lessons(source, name, dec)
     except Exception as e:                                   # GPU server down or malformed JSON: the decision stands
         out["lessons"], out["reader_ms"] = [], 0
         out["note"] = f"GPU reader unavailable ({type(e).__name__}); lessons skipped, decision and count unaffected"
+    steps.append({"name": "Pick lessons on the GPU", "detail": f"Qwen3 chose {len(out['lessons'])} memories; shown word for word" if out["reader_ms"] else "GPU reader unavailable; decision unaffected", "ms": out["reader_ms"]})
+    out["steps"] = steps
     return out
